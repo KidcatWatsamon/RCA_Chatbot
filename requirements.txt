@@ -1,5 +1,4 @@
-streamlit
-pandas
-openpyxl
-os
-io
+python==3.12.4
+streamlit==1.45.1
+pandas==2.2.3
+openpyxl==3.1.5
