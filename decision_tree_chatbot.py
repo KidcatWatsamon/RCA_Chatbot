@@ -195,13 +195,11 @@ def render_chatbot(node):
                 details += f"Explanation : {node['explanation']}"
             chat_bubble(details)
             st.markdown("<br>", unsafe_allow_html=True)
-            # Show follow-up action message for P1/P2 question
-            actions_question = "Let me give you some follow up actions for this problem"
-            if node.get("question"):
-                actions_question += f" {node['question']}"
-            chat_bubble(actions_question)
-            st.markdown("<br>", unsafe_allow_html=True)
-            # Now show the follow-up question and options
+             # Show follow-up action message only for P1/P2 question
+            if node.get("question") == "Was the problem considered as P1 or P2?":
+                chat_bubble("Let me give you some follow up actions for this problem")
+                st.markdown("<br>", unsafe_allow_html=True)
+             # Now show the follow-up question and options
             chat_bubble(node["question"])
             st.markdown("<br>", unsafe_allow_html=True)
             for option, next_node in node["options"].items():
