@@ -196,9 +196,11 @@ def render_chatbot(node):
             chat_bubble(details)
             st.markdown("<br>", unsafe_allow_html=True)
             # Show follow-up action message for P1/P2 question
-            if node.get("question") == "Was the problem considered as P1 or P2?":
-                chat_bubble("Let me give you some follow up actions for this problem<br> Is this problem considered as P1 or P2?")
-                st.markdown("<br>", unsafe_allow_html=True)
+            actions_question = "Let me give you some follow up actions for this problem"
+            if node.get("question") :
+                actions_question +=  {node['question']}
+            chat_bubble(actions_question)
+            st.markdown("<br>", unsafe_allow_html=True)
             # Now show the follow-up question and options
             chat_bubble(node["question"])
             st.markdown("<br>", unsafe_allow_html=True)
