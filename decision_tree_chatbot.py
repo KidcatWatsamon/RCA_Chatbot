@@ -171,8 +171,36 @@ def render_chatbot(node):
         chat_bubble("Hello, I am a RCA bot <br> I will help you find your problem's root cause!<br>Please select your problem category.")
         st.markdown("<br>", unsafe_allow_html=True)
         st.session_state.ticket_number = st.text_input("Enter your problem ticket number:")
+
+        # Style for the orange button
+        st.markdown("""
+            <style>
+            div.stButton > button.go-home-btn {
+                background-color: #ff9800;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 1.1em;
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+            div.stButton > button.go-home-btn:hover {
+                background-color: #e65100;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # "Change" button (default style)
         if st.button("Change"):
             st.session_state.current_node = decision_tree
+            st.rerun()
+
+        # "Go to Homepage" button (orange, same size as other buttons)
+        go_home_clicked = st.button("Go back to Homepage", key="go_home_btn")
+        if go_home_clicked:
+            st.session_state.role = None
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
             st.rerun()
         return
 
