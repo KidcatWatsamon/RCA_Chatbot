@@ -206,7 +206,6 @@ def render_chatbot(node):
             st.markdown("<br>", unsafe_allow_html=True)
             for option, next_node in node["options"].items():
                 if st.button(option):
-                    chat_bubble(option, is_bot=False)
                     st.session_state.current_node = next_node
                     st.rerun()
             if st.button("Restart"):
@@ -221,7 +220,6 @@ def render_chatbot(node):
             st.markdown("<br>", unsafe_allow_html=True)
             for option, next_node in node["options"].items():
                 if st.button(option):
-                    chat_bubble(option, is_bot=False)
                     st.session_state.current_node = next_node
                     st.rerun()
             if st.button("Restart"):
