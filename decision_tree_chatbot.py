@@ -11,7 +11,7 @@ if "role" not in st.session_state:
 
 if st.session_state.role is None:
     st.title("Welcome to the Root Cause Analysis Chatbot")
-    role = st.radio("Are you a user or admin?", ["User", "Admin"])
+    role = st.radio("Are you an user or admin?", ["User", "Admin"])
     if role == "User":
         if st.button("Continue as User"):
             st.session_state.role = "user"
@@ -89,8 +89,8 @@ decision_tree = {
                                     "explanation": "The change process was completed successfully but there was an incident as a result of the change.",
                                     "question": "Was the problem considered as P1 or P2?",
                                     "options": {
-                                        "P1": "Action: P1 ptask - QA what improvements are required on regression/capacity testing",
-                                        "P2": "Action: P2 ptask - QA to provide timelines on when the improvements will be available"
+                                        "P1": "Recommended Action : P1 Ptask - QA what improvements are required on regression/capacity testing",
+                                        "P2": "Recommended Action: P2 Ptask - QA to provide timelines on when the improvements will be available"
                                     }
                                 },
                                 "No": {
@@ -191,7 +191,7 @@ def render_chatbot(node):
         """, unsafe_allow_html=True)
 
         # "Change" button (default style)
-        if st.button("Change"):
+        if st.button("Change Category"):
             st.session_state.current_node = decision_tree
             st.rerun()
 
