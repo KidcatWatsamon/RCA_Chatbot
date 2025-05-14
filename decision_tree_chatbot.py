@@ -197,8 +197,8 @@ def render_chatbot(node):
             st.markdown("<br>", unsafe_allow_html=True)
             # Show follow-up action message for P1/P2 question
             actions_question = "Let me give you some follow up actions for this problem"
-            if node.get("question") :
-                actions_question +=  {node['question']}
+            if node.get("question"):
+                actions_question += f" {node['question']}"
             chat_bubble(actions_question)
             st.markdown("<br>", unsafe_allow_html=True)
             # Now show the follow-up question and options
