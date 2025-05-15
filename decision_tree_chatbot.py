@@ -20,7 +20,6 @@ if st.session_state.role is None:
         username = st.text_input("Admin Username")
         password = st.text_input("Admin Password", type="password")
         if st.button("Login as Admin"):
-            # Simple hardcoded credentials (replace with secure method in production)
             if username == "admin" and password == "password123":
                 st.session_state.role = "admin"
                 st.success("Logged in as admin.")
@@ -63,7 +62,7 @@ if st.session_state.role == "admin":
         st.rerun()
     st.stop()
 
-# Define the decision tree as a dictionary (your current logic under 'Change')
+# --- Decision Tree ---
 decision_tree = {
     "question": "Was this caused by a standard change?",
     "options": {
@@ -87,11 +86,7 @@ decision_tree = {
                                     "secondary_root_cause": "Test plan",
                                     "controllable": "Yes",
                                     "explanation": "The change process was completed successfully but there was an incident as a result of the change.",
-                                    "question": "Was the problem considered as P1 or P2?",
-                                    "options": {
-                                        "P1": "Recommended Action : P1 Ptask - QA what improvements are required on regression/capacity testing",
-                                        "P2": "Recommended Action: P2 Ptask - QA to provide timelines on when the improvements will be available"
-                                    }
+                                    "actions": "P1 Ptask - QA what improvements are required on regression/capacity testing. <br> P2 Ptask - QA to provide timelines on when the improvements will be available."
                                 },
                                 "No": {
                                     "root_cause": "Change Failure",
@@ -133,12 +128,15 @@ decision_tree = {
     }
 }
 
-# Initialize session state
+# --- Session State ---
 if "current_node" not in st.session_state:
     st.session_state.current_node = "intro"
 if "ticket_number" not in st.session_state:
     st.session_state.ticket_number = ""
+if "logged_this_ticket" not in st.session_state:
+    st.session_state.logged_this_ticket = False
 
+# --- Chat Bubble ---
 def chat_bubble(text, is_bot=True):
     if is_bot:
         st.markdown(
@@ -166,11 +164,41 @@ def chat_bubble(text, is_bot=True):
             unsafe_allow_html=True
         )
 
+# --- Helper: Detect leaf node ---
+def is_leaf_node(node):
+    if isinstance(node, dict):
+        if "actions" in node and isinstance(node["actions"], str):
+            return True
+        if "options" not in node:
+            return True
+    if isinstance(node, str):
+        return True
+    return False
+
+# --- Helper: Build details bubble ---
+def build_details(node):
+    details = []
+    if node.get("root_cause"):
+        details.append(f"Root Cause : {node['root_cause']}")
+    if node.get("trigger"):
+        details.append(f"Trigger : {node['trigger']}")
+    if node.get("secondary_root_cause"):
+        details.append(f"Secondary Root Cause : {node['secondary_root_cause']}")
+    if node.get("controllable"):
+        details.append(f"Controllable : {node['controllable']}")
+    if node.get("explanation"):
+        details.append(f"Explanation : {node['explanation']}")
+    return "<br>".join(details) if details else None
+
+# --- Chatbot Logic ---
 def render_chatbot(node):
     if node == "intro":
         chat_bubble("Hello, I am a RCA bot <br> I will help you find your problem's root cause!<br>Please select your problem category.")
         st.markdown("<br>", unsafe_allow_html=True)
-        st.session_state.ticket_number = st.text_input("Enter your problem ticket number:")
+        ticket_number = st.text_input("Enter your problem ticket number:")
+        if ticket_number != st.session_state.ticket_number:
+            st.session_state.ticket_number = ticket_number
+            st.session_state.logged_this_ticket = False  # Reset log flag for new ticket
 
         # Style for the orange button
         st.markdown("""
@@ -190,12 +218,10 @@ def render_chatbot(node):
             </style>
         """, unsafe_allow_html=True)
 
-        # "Change" button (default style)
         if st.button("Change Category"):
             st.session_state.current_node = decision_tree
             st.rerun()
 
-        # "Go to Homepage" button (orange, same size as other buttons)
         go_home_clicked = st.button("Go back to Homepage", key="go_home_btn")
         if go_home_clicked:
             st.session_state.role = None
@@ -204,116 +230,91 @@ def render_chatbot(node):
             st.rerun()
         return
 
-    if isinstance(node, dict):
-        # If node has root cause details and a follow-up question/options, show both as separate bubbles
-        if (
-            ("root_cause" in node or "trigger" in node or "secondary_root_cause" in node or "controllable" in node or "explanation" in node)
-            and "question" in node and "options" in node
-        ):
-            details = "Here is the summarization of the root cause<br>"
-            if node.get("root_cause"):
-                details += f"Primary Root Cause : {node['root_cause']}<br>"
-            if node.get("trigger"):
-                details += f"Trigger : {node['trigger']}<br>"
-            if node.get("secondary_root_cause"):
-                details += f"Secondary Root Cause : {node['secondary_root_cause']}<br>"
-            if node.get("controllable"):
-                details += f"Controllable : {node['controllable']}<br>"
-            if node.get("explanation"):
-                details += f"Explanation : {node['explanation']}"
-            chat_bubble(details)
-            st.markdown("<br>", unsafe_allow_html=True)
-             # Show follow-up action message only for P1/P2 question
-            if node.get("question") == "Was the problem considered as P1 or P2?":
-                chat_bubble("Let me give you some follow up actions for this problem")
-                st.markdown("<br>", unsafe_allow_html=True)
-             # Now show the follow-up question and options
-            chat_bubble(node["question"])
-            st.markdown("<br>", unsafe_allow_html=True)
-            for option, next_node in node["options"].items():
-                if st.button(option):
-                    st.session_state.current_node = next_node
-                    st.rerun()
-            if st.button("Restart"):
-                st.session_state.current_node = "intro"
-                st.session_state.ticket_number = ""
-                st.rerun()
-            return
+    # --- LEAF NODE HANDLING ---
+    if is_leaf_node(node):
+        if isinstance(node, dict):
+            details = build_details(node)
+            if details:
+                chat_bubble("Here is the summarization of the root cause<br>" + details)
+            if node.get("actions"):
+                chat_bubble("Let me give you some recommended follow up actions!")
+                chat_bubble(f"Recommended Actions:<br>{node['actions']}")
+        else:
+            chat_bubble(node)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Show the question/options if no root cause details
-        if "question" in node and "options" in node:
-            chat_bubble(node["question"])
-            st.markdown("<br>", unsafe_allow_html=True)
-            for option, next_node in node["options"].items():
-                if st.button(option):
-                    st.session_state.current_node = next_node
-                    st.rerun()
-            if st.button("Restart"):
-                st.session_state.current_node = "intro"
-                st.session_state.ticket_number = ""
-                st.rerun()
-            return
+        # Always load the log file (or create empty DataFrame)
+        if os.path.exists(log_file):
+            df = pd.read_excel(log_file)
+        else:
+            df = pd.DataFrame(columns=[
+                "ticket_number", "root_cause", "trigger",
+                "secondary_root_cause", "controllable", "explanation", "action", "actions"
+            ])
 
-        # If no options, show the summary/details and log the result
-        if "options" not in node:
-            details = "Here is the summarization of the root cause<br>"
-            if node.get("root_cause"):
-                details += f"Root Cause : {node['root_cause']}<br>"
-            if node.get("trigger"):
-                details += f"Trigger : {node['trigger']}<br>"
-            if node.get("secondary_root_cause"):
-                details += f"Secondary Root Cause : {node['secondary_root_cause']}<br>"
-            if node.get("controllable"):
-                details += f"Controllable : {node['controllable']}<br>"
-            if node.get("explanation"):
-                details += f"Explanation : {node['explanation']}"
-            chat_bubble(details)
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Log the result
-            log_file = "root_cause_log.xlsx"
-            log_row = {
-                "ticket_number": st.session_state.ticket_number,
-                "root_cause": node.get("root_cause", ""),
-                "trigger": node.get("trigger", ""),
-                "secondary_root_cause": node.get("secondary_root_cause", ""),
-                "controllable": node.get("controllable", ""),
-                "explanation": node.get("explanation", "")
-            }
-            if os.path.exists(log_file):
-                df = pd.read_excel(log_file)
+        # Log the result only once per ticket per session
+        if not st.session_state.logged_this_ticket and st.session_state.ticket_number:
+            if isinstance(node, dict):
+                log_row = {
+                    "ticket_number": st.session_state.ticket_number,
+                    "root_cause": node.get("root_cause", ""),
+                    "trigger": node.get("trigger", ""),
+                    "secondary_root_cause": node.get("secondary_root_cause", ""),
+                    "controllable": node.get("controllable", ""),
+                    "explanation": node.get("explanation", "")
+                }
             else:
-                df = pd.DataFrame(columns=log_row.keys())
+                log_row = {
+                    "ticket_number": st.session_state.ticket_number,
+                    "root_cause": "",
+                    "trigger": "",
+                    "secondary_root_cause": "",
+                    "controllable": "",
+                    "explanation": ""
+                }
             df = pd.concat([df, pd.DataFrame([log_row])], ignore_index=True)
             df.to_excel(log_file, index=False)
-           
-            # Prompt to download log for this ticket number
-            st.markdown("**Do you want to know what others achieved for the same ticket number?**")
-            filtered_df = df[df["ticket_number"] == st.session_state.ticket_number]
-            # Write filtered_df to a BytesIO buffer
-            excel_buffer = io.BytesIO()
-            filtered_df.to_excel(excel_buffer, index=False)
-            excel_buffer.seek(0)
-            st.download_button(
-                "Download log for this ticket number",
-                data=excel_buffer,
-                file_name=f"root_cause_log_{st.session_state.ticket_number}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            if st.button("Restart"):
-                st.session_state.current_node = "intro"
-                st.session_state.ticket_number = ""
+            st.session_state.logged_this_ticket = True  # Mark as logged
+
+        # Prompt to download log for this ticket number
+        st.markdown("**Do you want to know what others achieved for the same ticket number?**")
+        filtered_df = df[df["ticket_number"] == st.session_state.ticket_number]
+        excel_buffer = io.BytesIO()
+        filtered_df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
+        st.download_button(
+            "Download log for this ticket number",
+            data=excel_buffer,
+            file_name=f"root_cause_log_{st.session_state.ticket_number}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        if st.button("Restart"):
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
+            st.session_state.logged_this_ticket = False
+            st.rerun()
+        return
+
+    # --- NON-LEAF NODE HANDLING ---
+    if isinstance(node, dict) and "question" in node and "options" in node:
+        details = build_details(node)
+        if details:
+            chat_bubble("Here is the summarization of the root cause<br>" + details)
+            st.markdown("<br>", unsafe_allow_html=True)
+        chat_bubble(node["question"])
+        st.markdown("<br>", unsafe_allow_html=True)
+        for option, next_node in node["options"].items():
+            if st.button(option):
+                st.session_state.current_node = next_node
                 st.rerun()
-            return
+        if st.button("Restart"):
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
+            st.session_state.logged_this_ticket = False
+            st.rerun()
+        return
 
-    # If node is a string (leaf action)
-    chat_bubble(node)
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Restart"):
-        st.session_state.current_node = "intro"
-        st.session_state.ticket_number = ""
-        st.rerun()
-
-# Render the chatbot
+# --- Render the chatbot ---
 st.title("Root Cause Analysis Chatbot")
 render_chatbot(st.session_state.current_node)
