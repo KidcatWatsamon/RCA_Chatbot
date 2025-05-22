@@ -86,7 +86,15 @@ decision_tree = {
                                     "secondary_root_cause": "Test plan",
                                     "controllable": "Yes",
                                     "explanation": "The change process was completed successfully but there was an incident as a result of the change.",
-                                    "actions": "P1 Ptask - QA what improvements are required on regression/capacity testing. <br> P2 Ptask - QA to provide timelines on when the improvements will be available."
+                                    "priority": "Was the problem considered as P1 or P2?",
+                                    "actions": {
+                                        "P1": {
+                                            "action": "Recommended Action : P1 Ptask - QA what improvements are required on regression/capacity testing"
+                                        },
+                                        "P2": {
+                                            "action": "Recommended Action: P2 Ptask - QA to provide timelines on when the improvements will be available"
+                                        }
+                                    }
                                 },
                                 "No": {
                                     "root_cause": "Change Failure",
@@ -166,29 +174,15 @@ def chat_bubble(text, is_bot=True):
 
 # --- Helper: Detect leaf node ---
 def is_leaf_node(node):
+    # Explicitly treat any dict with an "action" key as a leaf
     if isinstance(node, dict):
-        if "actions" in node and isinstance(node["actions"], str):
+        if "action" in node and isinstance(node["action"], str):
             return True
-        if "options" not in node:
+        if "options" not in node and "actions" not in node:
             return True
     if isinstance(node, str):
         return True
     return False
-
-# --- Helper: Build details bubble ---
-def build_details(node):
-    details = []
-    if node.get("root_cause"):
-        details.append(f"Root Cause : {node['root_cause']}")
-    if node.get("trigger"):
-        details.append(f"Trigger : {node['trigger']}")
-    if node.get("secondary_root_cause"):
-        details.append(f"Secondary Root Cause : {node['secondary_root_cause']}")
-    if node.get("controllable"):
-        details.append(f"Controllable : {node['controllable']}")
-    if node.get("explanation"):
-        details.append(f"Explanation : {node['explanation']}")
-    return "<br>".join(details) if details else None
 
 # --- Chatbot Logic ---
 def render_chatbot(node):
@@ -232,13 +226,22 @@ def render_chatbot(node):
 
     # --- LEAF NODE HANDLING ---
     if is_leaf_node(node):
+        # Show details if present
         if isinstance(node, dict):
-            details = build_details(node)
-            if details:
-                chat_bubble("Here is the summarization of the root cause<br>" + details)
-            if node.get("actions"):
-                chat_bubble("Let me give you some recommended follow up actions!")
-                chat_bubble(f"Recommended Actions:<br>{node['actions']}")
+            details = "Here is the summarization of the root cause<br>"
+            if node.get("root_cause"):
+                details += f"Root Cause : {node['root_cause']}<br>"
+            if node.get("trigger"):
+                details += f"Trigger : {node['trigger']}<br>"
+            if node.get("secondary_root_cause"):
+                details += f"Secondary Root Cause : {node['secondary_root_cause']}<br>"
+            if node.get("controllable"):
+                details += f"Controllable : {node['controllable']}<br>"
+            if node.get("explanation"):
+                details += f"Explanation : {node['explanation']}"
+            if node.get("action"):
+                details += f"Action : {node['action']}"
+            chat_bubble(details)
         else:
             chat_bubble(node)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -249,7 +252,7 @@ def render_chatbot(node):
         else:
             df = pd.DataFrame(columns=[
                 "ticket_number", "root_cause", "trigger",
-                "secondary_root_cause", "controllable", "explanation", "action", "actions"
+                "secondary_root_cause", "controllable", "explanation", "action"
             ])
 
         # Log the result only once per ticket per session
@@ -261,7 +264,8 @@ def render_chatbot(node):
                     "trigger": node.get("trigger", ""),
                     "secondary_root_cause": node.get("secondary_root_cause", ""),
                     "controllable": node.get("controllable", ""),
-                    "explanation": node.get("explanation", "")
+                    "explanation": node.get("explanation", ""),
+                    "action": node.get("action", "")
                 }
             else:
                 log_row = {
@@ -270,7 +274,8 @@ def render_chatbot(node):
                     "trigger": "",
                     "secondary_root_cause": "",
                     "controllable": "",
-                    "explanation": ""
+                    "explanation": "",
+                    "action": node
                 }
             df = pd.concat([df, pd.DataFrame([log_row])], ignore_index=True)
             df.to_excel(log_file, index=False)
@@ -297,23 +302,68 @@ def render_chatbot(node):
         return
 
     # --- NON-LEAF NODE HANDLING ---
-    if isinstance(node, dict) and "question" in node and "options" in node:
-        details = build_details(node)
-        if details:
-            chat_bubble("Here is the summarization of the root cause<br>" + details)
+    if isinstance(node, dict):
+        if "question" in node and "options" in node:
+            if any(node.get(k) for k in ["root_cause", "trigger", "secondary_root_cause", "controllable", "explanation"]):
+                details = "Here is the summarization of the root cause<br>"
+                if node.get("root_cause"):
+                    details += f"Primary Root Cause : {node['root_cause']}<br>"
+                if node.get("trigger"):
+                    details += f"Trigger : {node['trigger']}<br>"
+                if node.get("secondary_root_cause"):
+                    details += f"Secondary Root Cause : {node['secondary_root_cause']}<br>"
+                if node.get("controllable"):
+                    details += f"Controllable : {node['controllable']}<br>"
+                if node.get("explanation"):
+                    details += f"Explanation : {node['explanation']}"
+                chat_bubble(details)
+                st.markdown("<br>", unsafe_allow_html=True)
+            if node.get("priority") == "Was the problem considered as P1 or P2?":
+                chat_bubble("Let me give you some follow up actions for this problem")
+                st.markdown("<br>", unsafe_allow_html=True)
+            chat_bubble(node["question"])
             st.markdown("<br>", unsafe_allow_html=True)
-        chat_bubble(node["question"])
-        st.markdown("<br>", unsafe_allow_html=True)
-        for option, next_node in node["options"].items():
-            if st.button(option):
-                st.session_state.current_node = next_node
+            for option, next_node in node["options"].items():
+                if st.button(option):
+                    st.session_state.current_node = next_node
+                    st.rerun()
+            if st.button("Restart"):
+                st.session_state.current_node = "intro"
+                st.session_state.ticket_number = ""
+                st.session_state.logged_this_ticket = False
                 st.rerun()
-        if st.button("Restart"):
-            st.session_state.current_node = "intro"
-            st.session_state.ticket_number = ""
-            st.session_state.logged_this_ticket = False
-            st.rerun()
-        return
+            return
+
+        # Handle "priority" node (P1/P2)
+        if "priority" in node and "actions" in node:
+            if any(node.get(k) for k in ["root_cause", "trigger", "secondary_root_cause", "controllable", "explanation"]):
+                details = "Here is the summarization of the root cause<br>"
+                if node.get("root_cause"):
+                    details += f"Primary Root Cause : {node['root_cause']}<br>"
+                if node.get("trigger"):
+                    details += f"Trigger : {node['trigger']}<br>"
+                if node.get("secondary_root_cause"):
+                    details += f"Secondary Root Cause : {node['secondary_root_cause']}<br>"
+                if node.get("controllable"):
+                    details += f"Controllable : {node['controllable']}<br>"
+                if node.get("explanation"):
+                    details += f"Explanation : {node['explanation']}"
+                chat_bubble(details)
+                st.markdown("<br>", unsafe_allow_html=True)
+            chat_bubble("Let me give you some follow up actions for this problem")
+            st.markdown("<br>", unsafe_allow_html=True)
+            chat_bubble(node["priority"])
+            st.markdown("<br>", unsafe_allow_html=True)
+            for action_key, action_node in node["actions"].items():
+                if st.button(action_key):
+                    st.session_state.current_node = action_node
+                    st.rerun()
+            if st.button("Restart"):
+                st.session_state.current_node = "intro"
+                st.session_state.ticket_number = ""
+                st.session_state.logged_this_ticket = False
+                st.rerun()
+            return
 
 # --- Render the chatbot ---
 st.title("Root Cause Analysis Chatbot")
