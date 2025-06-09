@@ -318,3 +318,323 @@ def render_chatbot(node):
 # --- Render the chatbot ---
 st.title("Root Cause Analysis Chatbot")
 render_chatbot(st.session_state.current_node)
+import streamlit as st
+import pandas as pd
+import os
+import io
+
+log_file = "root_cause_log.xlsx"
+
+# --- Simple login page ---
+if "role" not in st.session_state:
+    st.session_state.role = None
+
+if st.session_state.role is None:
+    st.title("Welcome to the Root Cause Analysis Chatbot")
+    role = st.radio("Are you an user or admin?", ["User", "Admin"])
+    if role == "User":
+        if st.button("Continue as User"):
+            st.session_state.role = "user"
+            st.rerun()
+    else:
+        username = st.text_input("Admin Username")
+        password = st.text_input("Admin Password", type="password")
+        if st.button("Login as Admin"):
+            if username == "admin" and password == "password123":
+                st.session_state.role = "admin"
+                st.success("Logged in as admin.")
+                st.rerun()
+            else:
+                st.error("Invalid admin credentials.")
+    st.stop()
+
+# --- Admin page ---
+if st.session_state.role == "admin":
+    st.title("Admin Log Controls")
+    if st.button("Reset Logs"):
+        if os.path.exists(log_file):
+            os.remove(log_file)
+            st.success("Root cause logs have been reset.")
+        else:
+            st.info("No log file to reset.")
+
+    uploaded_file = st.file_uploader("Upload a modified log file", type=["xlsx"])
+    if uploaded_file is not None:
+        df = pd.read_excel(uploaded_file)
+        df.to_excel(log_file, index=False)
+        st.success("Log file has been updated with the uploaded file.")
+
+    if os.path.exists(log_file):
+        df = pd.read_excel(log_file)
+        st.write("Current Log Table:")
+        st.dataframe(df)
+        excel_buffer = io.BytesIO()
+        df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
+        st.download_button(
+            "Download Full Log",
+            data=excel_buffer,
+            file_name="root_cause_log.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    if st.button("Logout"):
+        st.session_state.role = None
+        st.rerun()
+    st.stop()
+
+# --- Decision Tree ---
+decision_tree = {
+    "question": "Was this caused by a standard change?",
+    "options": {
+        "Yes": {
+            "root_cause": "Change Success, Incident Occurred",
+            "trigger": "Standard Change",
+            "explanation": "A standard change was conducted successfully but there was an incident as a result of the change.",
+        },
+        "No": {
+            "question": "Was the change process followed and the change performed as expected including prechecks?",
+            "options": {
+                "Yes": {
+                    "question": "Was the software developed by LSEG?",
+                    "options": {
+                        "Yes": {
+                            "question": "Was the change rolled back?",
+                            "options": {
+                                "Yes": {
+                                    "root_cause": "Software Failure",
+                                    "trigger": "Change",
+                                    "secondary_root_cause": "Test plan",
+                                    "controllable": "Yes",
+                                    "explanation": "The change process was completed successfully but there was an incident as a result of the change.",
+                                    "actions": "P1 Ptask - QA what improvements are required on regression/capacity testing. <br> P2 Ptask - QA to provide timelines on when the improvements will be available."
+                                },
+                                "No": {
+                                    "root_cause": "Change Failure",
+                                    "trigger": "Change",
+                                    "secondary_root_cause": "Inadequate Execution",
+                                    "controllable": "Yes",
+                                    "explanation": "The change process was completed successfully but there was an incident as a result of the change. To resolve the incident the change back out instructions were not followed."
+                                }
+                            }
+                        },
+                        "No": {
+                            "root_cause": "Third Party Software Failure",
+                            "trigger": "Change",
+                            "secondary_root_cause": "Version of software was the current version",
+                            "controllable": "No",
+                            "explanation": "The change process was completed successfully but there was an incident as a result of third-party software."
+                        }
+                    }
+                },
+                "No": {
+                    "question": "Did the change follow the change process?",
+                    "options": {
+                        "Yes": {
+                            "root_cause": "Change Failure",
+                            "trigger": "Change",
+                            "secondary_root_cause": "Inadequate Pre or Post-change Checks",
+                            "explanation": "The change process was followed but there was inadequate preparation or steps in the change that did not behave as expected."
+                        },
+                        "No": {
+                            "root_cause": "Operating Failure",
+                            "trigger": "Change",
+                            "secondary_root_cause": "Inadequate Execution",
+                            "explanation": "A change was made that did not follow the change process. Usually an unauthorised change."
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# --- Session State ---
+if "current_node" not in st.session_state:
+    st.session_state.current_node = "intro"
+if "ticket_number" not in st.session_state:
+    st.session_state.ticket_number = ""
+if "logged_this_ticket" not in st.session_state:
+    st.session_state.logged_this_ticket = False
+
+# --- Chat Bubble ---
+def chat_bubble(text, is_bot=True):
+    if is_bot:
+        st.markdown(
+            f"""
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <img src="https://img.icons8.com/fluency/48/chatbot.png" width="30" style="margin-right: 10px;">
+                <div style="position: relative; background-color: #f1f0f0; padding: 10px 15px; border-radius: 10px; max-width: 70%; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);">
+                    {text}
+                    <div style="position: absolute; top: 10px; left: -10px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-right: 10px solid #f1f0f0;"></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                <div style="position: relative; background-color: #d1e7dd; padding: 10px 15px; border-radius: 10px; max-width: 70%; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);">
+                    {text}
+                    <div style="position: absolute; top: 10px; right: -10px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid #d1e7dd;"></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# --- Helper: Detect leaf node ---
+def is_leaf_node(node):
+    if isinstance(node, dict):
+        if "actions" in node and isinstance(node["actions"], str):
+            return True
+        if "options" not in node:
+            return True
+    if isinstance(node, str):
+        return True
+    return False
+
+# --- Helper: Build details bubble ---
+def build_details(node):
+    details = []
+    if node.get("root_cause"):
+        details.append(f"Root Cause : {node['root_cause']}")
+    if node.get("trigger"):
+        details.append(f"Trigger : {node['trigger']}")
+    if node.get("secondary_root_cause"):
+        details.append(f"Secondary Root Cause : {node['secondary_root_cause']}")
+    if node.get("controllable"):
+        details.append(f"Controllable : {node['controllable']}")
+    if node.get("explanation"):
+        details.append(f"Explanation : {node['explanation']}")
+    return "<br>".join(details) if details else None
+
+# --- Chatbot Logic ---
+def render_chatbot(node):
+    if node == "intro":
+        chat_bubble("Hello, I am a RCA bot <br> I will help you find your problem's root cause!<br>Please select your problem category.")
+        st.markdown("<br>", unsafe_allow_html=True)
+        ticket_number = st.text_input("Enter your problem ticket number:")
+        if ticket_number != st.session_state.ticket_number:
+            st.session_state.ticket_number = ticket_number
+            st.session_state.logged_this_ticket = False  # Reset log flag for new ticket
+
+        # Style for the orange button
+        st.markdown("""
+            <style>
+            div.stButton > button.go-home-btn {
+                background-color: #ff9800;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 1.1em;
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+            div.stButton > button.go-home-btn:hover {
+                background-color: #e65100;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        if st.button("Change Category"):
+            st.session_state.current_node = decision_tree
+            st.rerun()
+
+        go_home_clicked = st.button("Go back to Homepage", key="go_home_btn")
+        if go_home_clicked:
+            st.session_state.role = None
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
+            st.rerun()
+        return
+
+    # --- LEAF NODE HANDLING ---
+    if is_leaf_node(node):
+        if isinstance(node, dict):
+            details = build_details(node)
+            if details:
+                chat_bubble("Here is the summarization of the root cause<br>" + details)
+            if node.get("actions"):
+                chat_bubble("Let me give you some recommended follow up actions!")
+                chat_bubble(f"Recommended Actions:<br>{node['actions']}")
+        else:
+            chat_bubble(node)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Always load the log file (or create empty DataFrame)
+        if os.path.exists(log_file):
+            df = pd.read_excel(log_file)
+        else:
+            df = pd.DataFrame(columns=[
+                "ticket_number", "root_cause", "trigger",
+                "secondary_root_cause", "controllable", "explanation", "action", "actions"
+            ])
+
+        # Log the result only once per ticket per session
+        if not st.session_state.logged_this_ticket and st.session_state.ticket_number:
+            if isinstance(node, dict):
+                log_row = {
+                    "ticket_number": st.session_state.ticket_number,
+                    "root_cause": node.get("root_cause", ""),
+                    "trigger": node.get("trigger", ""),
+                    "secondary_root_cause": node.get("secondary_root_cause", ""),
+                    "controllable": node.get("controllable", ""),
+                    "explanation": node.get("explanation", "")
+                }
+            else:
+                log_row = {
+                    "ticket_number": st.session_state.ticket_number,
+                    "root_cause": "",
+                    "trigger": "",
+                    "secondary_root_cause": "",
+                    "controllable": "",
+                    "explanation": ""
+                }
+            df = pd.concat([df, pd.DataFrame([log_row])], ignore_index=True)
+            df.to_excel(log_file, index=False)
+            st.session_state.logged_this_ticket = True  # Mark as logged
+
+        # Prompt to download log for this ticket number
+        st.markdown("**Do you want to know what others achieved for the same ticket number?**")
+        filtered_df = df[df["ticket_number"] == st.session_state.ticket_number]
+        excel_buffer = io.BytesIO()
+        filtered_df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
+        st.download_button(
+            "Download log for this ticket number",
+            data=excel_buffer,
+            file_name=f"root_cause_log_{st.session_state.ticket_number}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        if st.button("Restart"):
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
+            st.session_state.logged_this_ticket = False
+            st.rerun()
+        return
+
+    # --- NON-LEAF NODE HANDLING ---
+    if isinstance(node, dict) and "question" in node and "options" in node:
+        details = build_details(node)
+        if details:
+            chat_bubble("Here is the summarization of the root cause<br>" + details)
+            st.markdown("<br>", unsafe_allow_html=True)
+        chat_bubble(node["question"])
+        st.markdown("<br>", unsafe_allow_html=True)
+        for option, next_node in node["options"].items():
+            if st.button(option):
+                st.session_state.current_node = next_node
+                st.rerun()
+        if st.button("Restart"):
+            st.session_state.current_node = "intro"
+            st.session_state.ticket_number = ""
+            st.session_state.logged_this_ticket = False
+            st.rerun()
+        return
+
+# --- Render the chatbot ---
+st.title("Root Cause Analysis Chatbot")
+render_chatbot(st.session_state.current_node)
